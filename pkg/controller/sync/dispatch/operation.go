@@ -46,6 +46,7 @@ type OperationDispatcher interface {
 }
 
 type operationDispatcherImpl struct {
+	// 就是一个简单的根据集群名字获取member集群客户端的函数 这个被util包里面的federatedInformerImpl实现了
 	clientAccessor clientAccessorFunc
 
 	resultChan          chan util.ReconciliationStatus

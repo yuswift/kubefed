@@ -15,6 +15,9 @@ limitations under the License.
 */
 
 package kubefedcluster
+// kubefedcluster controller 是手写的 不是用kubebuilder生成的
+// 功能比较简单 只是把一些client 放进内存 缓存起来 不会做其他多余的事情
+// 这里没有finalizer这个字段 我猜测是因为这个controller的功能比较简单 没有其他关联资源
 
 import (
 	"context"
@@ -45,6 +48,7 @@ import (
 )
 
 // ClusterData stores cluster client and previous health check probe results of individual cluster.
+// 每个集群的名字都会对应一个clusterdata 方便其他的controller使用
 type ClusterData struct {
 	// clusterKubeClient is the kube client for the cluster.
 	clusterKubeClient *ClusterClient
@@ -67,6 +71,7 @@ type ClusterController struct {
 	// clusterHealthCheckConfig is the configurable parameters for cluster health check
 	clusterHealthCheckConfig *util.ClusterHealthCheckConfig
 
+	// 为了线程安全加的一把锁 因为用的是原生的map
 	mu sync.RWMutex
 
 	// clusterDataMap is a mapping of clusterName and the cluster specific details.
@@ -95,6 +100,8 @@ func StartClusterController(config *util.ControllerConfig, clusterHealthCheckCon
 }
 
 // newClusterController returns a new cluster controller
+// 初始化controller的方式比较native 增加几个回调函数 跟sample-controller的代码非常类似
+// crud本质上都是对map的操作
 func newClusterController(config *util.ControllerConfig, clusterHealthCheckConfig *util.ClusterHealthCheckConfig) (*ClusterController, error) {
 	kubeConfig := restclient.CopyConfig(config.KubeConfig)
 	kubeConfig.Timeout = clusterHealthCheckConfig.Timeout
@@ -230,6 +237,7 @@ func (cc *ClusterController) updateClusterStatus() error {
 			}
 		}
 
+		// 想起了曾曾经的一个面试题 哈哈哈😂 这里必须要传地址才能够调用done方法 否则永远不会退出
 		wg.Add(1)
 		go cc.updateIndividualClusterStatus(cluster, clusterData, &wg)
 	}

@@ -127,6 +127,7 @@ func (d *managedDispatcherImpl) Wait() (bool, error) {
 	return ok, nil
 }
 
+// 调用member集群客户端创建资源
 func (d *managedDispatcherImpl) Create(clusterName string) {
 	// Default the status to an operation-specific timeout.  Otherwise
 	// when a timeout occurs it won't be possible to determine which

@@ -19,7 +19,7 @@ package util
 import (
 	"sync"
 )
-
+// 线程安全的map 实现也太简单了吧 不知道为什么不用sync.Map
 type SafeMap struct {
 	sync.RWMutex
 	m map[string]interface{}

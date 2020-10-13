@@ -69,6 +69,7 @@ type KubeFedSyncController struct {
 	clusterDeliverer *util.DelayingDeliverer
 
 	// Informer for resources in member clusters
+	// 这里单独对cluster对象进行监听 因为在同步资源时需要获取当前的集群列表
 	informer util.FederatedInformer
 
 	// For events
@@ -80,6 +81,7 @@ type KubeFedSyncController struct {
 
 	typeConfig typeconfig.Interface
 
+	// 对 f deploy 这类对象进行监听 只有读?
 	fedAccessor FederatedResourceAccessor
 
 	hostClusterClient genericclient.Client

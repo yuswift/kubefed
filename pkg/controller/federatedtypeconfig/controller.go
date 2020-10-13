@@ -139,6 +139,7 @@ func (c *Controller) reconcile(qualifiedName util.QualifiedName) util.Reconcilia
 		return util.StatusError
 	}
 
+	// 这里不是很理解 为什么根据这个key找不到对应的对象 返回 StatusAllOK？TODO
 	if cachedObj == nil {
 		return util.StatusAllOK
 	}
@@ -150,7 +151,9 @@ func (c *Controller) reconcile(qualifiedName util.QualifiedName) util.Reconcilia
 	syncEnabled := typeConfig.GetPropagationEnabled()
 	statusEnabled := typeConfig.GetStatusEnabled()
 
+	// 意味着kubefed controller是否只操作当前ns的对象
 	limitedScope := c.controllerConfig.TargetNamespace != metav1.NamespaceAll
+	// 如果kubefed只操作当前ns 而目标对象 是一个全局的 就跳过
 	if limitedScope && syncEnabled && !typeConfig.GetNamespaced() {
 		_, ok := c.getStopChannel(typeConfig.Name)
 		if !ok {
@@ -176,10 +179,12 @@ func (c *Controller) reconcile(qualifiedName util.QualifiedName) util.Reconcilia
 		return util.StatusAllOK
 	}
 
+	// statuskey 和config name在同一个map里面
 	statusKey := typeConfig.Name + "/status"
 	syncStopChan, syncRunning := c.getStopChannel(typeConfig.Name)
 	statusStopChan, statusRunning := c.getStopChannel(statusKey)
 
+	// k8s的资源gc规范 如果不是空 就执行删除策略 逻辑是停止相关的controller 而资源本身的操作是靠k8s的apiserver来做? TODO
 	deleted := typeConfig.DeletionTimestamp != nil
 	if deleted {
 		if syncRunning {
@@ -189,11 +194,13 @@ func (c *Controller) reconcile(qualifiedName util.QualifiedName) util.Reconcilia
 			c.stopController(statusKey, statusStopChan)
 		}
 
+		// 如果删除的是fed ns则需要单独处理 因为下面还有其他资源 只是简单把他们重新入队列 下面的代码会处理这个资源没有对应ns的情况
 		if typeConfig.IsNamespace() {
 			klog.Infof("Reconciling all namespaced FederatedTypeConfig resources on deletion of %q", key)
 			c.reconcileOnNamespaceFTCUpdate()
 		}
 
+		// 删除这个tag 确保资源能被删除
 		err := c.removeFinalizer(typeConfig)
 		if err != nil {
 			runtime.HandleError(errors.Wrapf(err, "Failed to remove finalizer from FederatedTypeConfig %q", key))
@@ -207,6 +214,7 @@ func (c *Controller) reconcile(qualifiedName util.QualifiedName) util.Reconcilia
 		runtime.HandleError(errors.Wrapf(err, "Failed to ensure finalizer for FederatedTypeConfig %q", key))
 		return util.StatusError
 	} else if updated && typeConfig.IsNamespace() {
+		// 又把所有对象重新入队列 确保之前没有启动的controller被重新启动
 		// Detected creation of the namespace FTC. If there are existing FTCs
 		// which did not start their sync controllers due to the lack of a
 		// namespace FTC, then reconcile them now so they can start.
@@ -215,8 +223,10 @@ func (c *Controller) reconcile(qualifiedName util.QualifiedName) util.Reconcilia
 	}
 
 	startNewSyncController := !syncRunning && syncEnabled
+	// 如果sync controller在运行并且被disable或者这个资源对应的ns不存在 就执行停止操作
 	stopSyncController := syncRunning && (!syncEnabled || (typeConfig.GetNamespaced() && !c.namespaceFTCExists()))
 	if startNewSyncController {
+		// 启动controller的代码 需要仔细看看如何动态生成controller的
 		if err := c.startSyncController(typeConfig); err != nil {
 			runtime.HandleError(err)
 			return util.StatusError
@@ -225,6 +235,7 @@ func (c *Controller) reconcile(qualifiedName util.QualifiedName) util.Reconcilia
 		c.stopController(typeConfig.Name, syncStopChan)
 	}
 
+	// 逻辑跟sync比较类似
 	startNewStatusController := !statusRunning && statusEnabled
 	stopStatusController := statusRunning && !statusEnabled
 	if startNewStatusController {
@@ -238,6 +249,7 @@ func (c *Controller) reconcile(qualifiedName util.QualifiedName) util.Reconcilia
 
 	if !startNewSyncController && !stopSyncController &&
 		typeConfig.Status.ObservedGeneration != typeConfig.Generation {
+		// refresh操作就只是停止再启动
 		if err := c.refreshSyncController(typeConfig); err != nil {
 			runtime.HandleError(err)
 			return util.StatusError

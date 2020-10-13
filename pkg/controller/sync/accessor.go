@@ -32,6 +32,8 @@ import (
 	"sigs.k8s.io/kubefed/pkg/controller/util"
 )
 
+// 这个注释很奇怪 这个accessor只是用来读取? 没有其他写的操作 实际代码里也是这么做的 看来需要跟其他controller一起看看 TODO
+// accessor只监听 具体的push操作给dispatcher去做
 // FederatedResourceAccessor provides a way to retrieve and visit
 // logical federated resources (e.g. FederatedConfigMap)
 type FederatedResourceAccessor interface {
@@ -54,6 +56,7 @@ type resourceAccessor struct {
 	// The informer used to source namespaces for templates of
 	// federated namespaces.  Will only be initialized if
 	// targetIsNamespace=true.
+	// 当被联邦的资源是ns类型的时候 用来获取ns
 	namespaceStore      cache.Store
 	namespaceController cache.Controller
 
@@ -62,6 +65,7 @@ type resourceAccessor struct {
 	// The informer used to source federated namespaces used in
 	// determining placement for namespaced resources.  Will only be
 	// initialized if the target resource is namespaced.
+	// 被联邦资源所在的ns的informer
 	fedNamespaceStore      cache.Store
 	fedNamespaceController cache.Controller
 
@@ -72,7 +76,7 @@ type resourceAccessor struct {
 	eventRecorder record.EventRecorder
 }
 
-func NewFederatedResourceAccessor(
+func NewFederatedRe≤sourceAccessor(
 	controllerConfig *util.ControllerConfig,
 	typeConfig typeconfig.Interface,
 	fedNamespaceAPIResource *metav1.APIResource,
@@ -88,9 +92,11 @@ func NewFederatedResourceAccessor(
 		eventRecorder:           eventRecorder,
 	}
 
+	// control plane操作的ns也就是其他controller可以操作的ns
 	targetNamespace := controllerConfig.TargetNamespace
 
 	federatedTypeAPIResource := typeConfig.GetFederatedType()
+	// 这个client用来操作对应的api资源对象
 	federatedTypeClient, err := util.NewResourceClient(controllerConfig.KubeConfig, &federatedTypeAPIResource)
 	if err != nil {
 		return nil, err
